@@ -1,0 +1,17 @@
+# 의존성 설치
+pip install -r requirements.txt
+
+# 특정 날짜 범위 수집 (테스트용)
+python main.py --new 2007-01-01 2007-12-31 --limit 500
+
+# 갯수 제한 X (무제한)
+python main.py --new 2007-01-01 2007-12-31 --limit 0
+
+# 이전 수집 완료일부터 오늘까지 자동 이어서
+python main.py --continue
+
+# 중단 후 재개 (resumption_token 자동 감지)
+python main.py --new 2007-01-01 2007-12-31
+
+# 재개 무시하고 처음부터 다시
+python main.py --new 2007-01-01 2007-12-31 --no-resume

@@ -166,6 +166,7 @@ OUTPUT_SCHEMA: dict = {
             "required": ["paper_id", "assignment"],
             "properties": {
                 "paper_id": {"type": "string", "minLength": 1},
+                "title": {"type": "string"},
                 "assignment": {
                     "type": "object",
                     "additionalProperties": False,

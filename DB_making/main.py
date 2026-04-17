@@ -3,10 +3,10 @@ import logging
 import sys
 from datetime import date
 
-from harvester.client import OaiPmhClient
-from harvester.database import Database
-from harvester.harvester import Harvester
-from harvester.parser import OaiPmhParser
+from DB_making.harvester.client import OaiPmhClient
+from DB_making.harvester.database import Database
+from DB_making.harvester.harvester import Harvester
+from DB_making.harvester.parser import OaiPmhParser
 
 # ---------------------------------------------------------------------------
 # Configuration

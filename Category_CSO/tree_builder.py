@@ -46,7 +46,7 @@ _REL_EQ_REL = "http://cso.kmi.open.ac.uk/schema/cso#relatedEquivalent"
 _CONTRIB_REL = "http://cso.kmi.open.ac.uk/schema/cso#contributesTo"
 
 _DEFAULT_RUN_CONFIG = {
-    "max_iterations": 3,
+    "max_iterations": 2,
     "top_k": 5,
     "ambiguity_margin": 0.08,
     "max_intermediate_nodes_per_root": 3,
@@ -596,17 +596,84 @@ def _merge_by_jaccard(
     return merge_map
 
 
+def _ontology_nearest_label(
+    result_labels: list[str],
+    label_set: set[str],
+    onto: "_CSOOntology",
+    max_hops: int = 4,
+) -> str | None:
+    """
+    CSO 온톨로지 ancestor 경로를 BFS로 탐색해 label_set에 속하는
+    가장 가까운 상위 토픽을 반환한다 (없으면 None).
+    """
+    from collections import deque
+    visited: set[str] = set()
+    queue: deque[tuple[str, int]] = deque()
+    for lbl in result_labels:
+        slug = lbl.lower().replace(" ", "_")
+        queue.append((slug, 0))
+        visited.add(slug)
+        # label_set은 space-form이므로 slug→space 변환해 비교
+        if lbl in label_set or slug.replace("_", " ") in label_set:
+            return lbl if lbl in label_set else slug.replace("_", " ")
+
+    while queue:
+        node, hops = queue.popleft()
+        if hops >= max_hops:
+            continue
+        for parent in onto.get_parents(node):
+            if parent in visited:
+                continue
+            visited.add(parent)
+            parent_space = parent.replace("_", " ")
+            if parent in label_set or parent_space in label_set:
+                return parent if parent in label_set else parent_space
+            queue.append((parent, hops + 1))
+    return None
+
+
+def _keyword_nearest_label(
+    result_labels: list[str],
+    label_set: list[str],
+    cfo: "CFOAdapter",
+) -> tuple[str, float]:
+    """
+    결과 라벨들의 키워드 집합과 label_set 각 항목의 키워드 집합 간
+    Jaccard 유사도로 가장 가까운 label을 반환한다.
+    """
+    result_kws: set[str] = set()
+    for lbl in result_labels:
+        result_kws.update(cfo.initial_keywords(lbl))
+
+    best_label = label_set[0]
+    best_score = 0.0
+    for lbl in label_set:
+        lbl_kws = set(cfo.initial_keywords(lbl))
+        j = _jaccard(result_kws, lbl_kws)
+        if j > best_score:
+            best_score = j
+            best_label = lbl
+    return best_label, best_score
+
+
 def _simulate_assignment(
     papers: list[dict],
     label_set: list[str],
     classify_results: dict[str, list[dict]],
+    cfo: "CFOAdapter | None" = None,
 ) -> dict[str, dict]:
     """
     Assign each paper to the best label in label_set.
     Returns {paper_id: {label_id, score, top2_score, top2_label}}.
+
+    label_set에 직접 매핑 안 되는 논문은:
+      1. CSO 온톨로지 ancestor BFS → label_set 일치 항목 탐색
+      2. keyword Jaccard 유사도 → 가장 가까운 label 선택
+      3. 그래도 없으면 최후 fallback (label_set[0], score=0.1)
     """
     assignments: dict[str, dict] = {}
     label_set_set = set(label_set)
+    onto = _get_ontology()
 
     for paper in papers:
         pid = paper["paper_id"]
@@ -614,12 +681,26 @@ def _simulate_assignment(
         in_set = [r for r in results if r["label_id"] in label_set_set]
 
         if not in_set:
-            # Fallback: use top result and map it to nearest label by score
-            if results:
-                best = sorted(results, key=lambda x: (-x["score"], x["label_id"]))[0]
-                in_set = [{"label_id": label_set[0], "score": best["score"]}]
+            result_labels = [r["label_id"] for r in results]
+
+            # 1. CSO ancestor BFS
+            nearest = _ontology_nearest_label(result_labels, label_set_set, onto)
+            if nearest:
+                # 원래 결과 중 best score를 nearest의 점수로 사용
+                best_raw = results[0]["score"] if results else 0.1
+                in_set = [{"label_id": nearest, "score": round(best_raw * 0.7, 4)}]
+            elif cfo is not None and result_labels:
+                # 2. keyword Jaccard
+                kw_label, kw_score = _keyword_nearest_label(result_labels, label_set, cfo)
+                if kw_score > 0.0:
+                    best_raw = results[0]["score"] if results else 0.1
+                    in_set = [{"label_id": kw_label, "score": round(best_raw * 0.5, 4)}]
+                else:
+                    # 3. last resort fallback
+                    in_set = [{"label_id": label_set[0], "score": 0.05}]
             else:
-                in_set = [{"label_id": label_set[0], "score": 0.1}]
+                # 3. last resort fallback
+                in_set = [{"label_id": label_set[0], "score": 0.05}]
 
         in_set_sorted = sorted(in_set, key=lambda x: (-x["score"], x["label_id"]))
         top1 = in_set_sorted[0]
@@ -652,13 +733,16 @@ def _detect_soft_overlap(
     assignments: dict[str, dict],
     margin: float,
 ) -> set[str]:
-    """Return paper_ids where |top1_score - top2_score| <= margin."""
+    """
+    Return paper_ids that are ambiguous: top1/top2 score gap <= margin.
+    """
     ambiguous: set[str] = set()
     for pid, asgn in assignments.items():
         t2 = asgn.get("top2_score")
         t2l = asgn.get("top2_label")
         if t2 is not None and t2l is not None and t2l != asgn["label_id"]:
-            if asgn["score"] - t2 <= margin:
+            score = asgn.get("score", 1.0)
+            if score - t2 <= margin:
                 ambiguous.add(pid)
     return ambiguous
 
@@ -699,6 +783,7 @@ def _select_labels(
     classify_results: dict[str, list[dict]],
     run_config: dict,
     warnings: list[str],
+    enable_boost: bool = True,
 ) -> list[str]:
     """
     Select 1-3 intermediate node labels for a root group.
@@ -734,10 +819,74 @@ def _select_labels(
     if not selected:
         selected = [ranked[0]] if ranked else ["unknown"]
 
+    # 4b. Coverage boost: disabled — reexpress 완료 후 사후 처리로 대체됨
+
     # 5. min-children feasibility: simulate and adjust
     selected = _adjust_for_min_children(papers, selected, classify_results, warnings, cfo)
 
     return selected
+
+
+def _boost_coverage(
+    papers: list[dict],
+    selected: list[str],
+    ranked_candidates: list[str],
+    classify_results: dict[str, list[dict]],
+    warnings: list[str],
+    coverage_threshold: float = 0.75,
+    max_extra: int = 2,
+) -> list[str]:
+    """
+    선택된 label_set에 직접 매핑되지 않는 논문 비율이 (1-coverage_threshold) 초과이면
+    미매핑 논문들의 top 토픽 중 빈도 높은 것을 추가 라벨로 보충.
+    시간 비용 없음 — 이미 계산된 classify_results만 사용.
+    """
+    selected_set = set(selected)
+    unmapped_pids: list[str] = []
+    for paper in papers:
+        pid = paper["paper_id"]
+        results = classify_results.get(pid, [])
+        if not any(r["label_id"] in selected_set for r in results):
+            unmapped_pids.append(pid)
+
+    coverage = 1.0 - len(unmapped_pids) / max(len(papers), 1)
+    if coverage >= coverage_threshold:
+        return selected
+
+    # 미매핑 논문들의 top 토픽 빈도 집계
+    extra_freq: dict[str, int] = defaultdict(int)
+    for pid in unmapped_pids:
+        for r in classify_results.get(pid, [])[:3]:
+            lbl = r["label_id"]
+            if lbl not in selected_set:
+                extra_freq[lbl] += 1
+
+    if not extra_freq:
+        return selected
+
+    # 빈도 순으로 추가 (이미 ranked_candidates에 있으면 우선)
+    extra_ranked = sorted(extra_freq.items(), key=lambda x: (
+        -x[1],
+        0 if x[0] in set(ranked_candidates) else 1,
+    ))
+
+    added = 0
+    result = list(selected)
+    for lbl, freq in extra_ranked:
+        if added >= max_extra:
+            break
+        if lbl not in selected_set and freq >= 2:
+            result.append(lbl)
+            selected_set.add(lbl)
+            added += 1
+
+    if added:
+        warnings.append(
+            f"Coverage boost: added {added} label(s) {result[len(selected):]} "
+            f"to cover {len(unmapped_pids)} unmapped papers "
+            f"(coverage was {coverage:.0%})"
+        )
+    return result
 
 
 def _adjust_for_min_children(
@@ -758,7 +907,7 @@ def _adjust_for_min_children(
         current = label_set[: len(label_set) - attempt] if attempt > 0 else label_set
         if not current:
             break
-        asgn = _simulate_assignment(papers, current, classify_results)
+        asgn = _simulate_assignment(papers, current, classify_results, cfo)
         groups = _tie_break_sort(papers, asgn)
 
         singletons = [lid for lid, ps in groups.items() if len(ps) < 2]
@@ -773,7 +922,7 @@ def _adjust_for_min_children(
                     continue
                 # Try replacing singleton label with parent
                 trial = [parent if l == s_label else l for l in current]
-                trial_asgn = _simulate_assignment(papers, trial, classify_results)
+                trial_asgn = _simulate_assignment(papers, trial, classify_results, cfo)
                 trial_groups = _tie_break_sort(papers, trial_asgn)
                 trial_singletons = [l for l, ps in trial_groups.items() if len(ps) < 2]
                 if len(trial_singletons) < len(singletons):
@@ -784,7 +933,7 @@ def _adjust_for_min_children(
                     break
 
     # Final fallback: collapse to 1 label if still singletons
-    asgn = _simulate_assignment(papers, current, classify_results)
+    asgn = _simulate_assignment(papers, current, classify_results, cfo)
     groups = _tie_break_sort(papers, asgn)
     remaining_singletons = [lid for lid, ps in groups.items() if len(ps) < 2]
 
@@ -873,8 +1022,8 @@ def _expand_large_node(
         )
         return None
 
-    # 4. Select sub-labels using filtered results only
-    sub_labels = _select_labels(group_papers, cfo, filtered, run_config, warnings)
+    # 4. Select sub-labels using filtered results only (coverage boost 비활성화: sub-labels는 이미 필터됨)
+    sub_labels = _select_labels(group_papers, cfo, filtered, run_config, warnings, enable_boost=False)
 
     # Must produce at least 2 distinct sub-labels to be worth expanding
     if len(sub_labels) < 2:
@@ -883,9 +1032,15 @@ def _expand_large_node(
         )
         return None
 
-    # 5. Assign papers to sub-labels (재분류 없이 1차 결과 기반 직접 배정)
-    sub_assignments = _simulate_assignment(group_papers, sub_labels,
-                                           {pid: list(res) for pid, res in sub_results.items()})
+    # 5. Assign papers to sub-labels
+    # filtered에 없는 논문(sub_candidate 매핑 없음)은 ancestor BFS로 nearest sub-label 탐색.
+    # filtered를 base로 사용하되 _simulate_assignment에서 cfo를 전달해 fallback을 정교화.
+    sub_assign_input = {pid: list(res) for pid, res in filtered.items()}
+    # filtered에 없는 논문도 그룹에 포함돼야 하므로 원래 결과로 채움
+    for p in group_papers:
+        if p["paper_id"] not in sub_assign_input:
+            sub_assign_input[p["paper_id"]] = sub_results.get(p["paper_id"], [])
+    sub_assignments = _simulate_assignment(group_papers, sub_labels, sub_assign_input, cfo)
     sub_assignments = _repair_hard_duplicates(group_papers, sub_labels, sub_assignments)
     sub_groups = _tie_break_sort(group_papers, sub_assignments)
 
@@ -913,6 +1068,7 @@ def _expand_large_node(
             asgn = sub_assignments[pid]
             children.append({
                 "paper_id": pid,
+                "title": gp.get("title", ""),
                 "assignment": {
                     "cfo_label_id": asgn["label_id"],
                     "score": asgn["score"],
@@ -959,7 +1115,7 @@ def _iterative_reexpress(
 
     # Build mutable copy of classify results
     current_results = {pid: list(res) for pid, res in classify_results.items()}
-    assignments = _simulate_assignment(papers, label_set, current_results)
+    assignments = _simulate_assignment(papers, label_set, current_results, cfo)
 
     # Track reexpression metadata
     reexpr_meta: dict[str, dict] = {
@@ -974,14 +1130,7 @@ def _iterative_reexpress(
     for iteration in range(1, max_iter + 1):
         ambiguous = _detect_soft_overlap(assignments, margin)
 
-        # Find singleton groups
-        groups = _tie_break_sort(papers, assignments)
-        singleton_pids: set[str] = set()
-        for lid, ps in groups.items():
-            if len(ps) < 2 and len(papers) > 1:
-                singleton_pids.update(p["paper_id"] for p in ps)
-
-        candidates = ambiguous | singleton_pids
+        candidates = ambiguous
         if not candidates:
             break
 
@@ -1002,29 +1151,40 @@ def _iterative_reexpress(
                 paper, cur_asgn["label_id"], cur_asgn.get("top2_label"), cfo
             )
 
-        # 재분류: 캐시 miss인 텍스트만 배치로 병렬 classify
+        # 재분류: 모든 후보 텍스트를 배치로 병렬 classify
         parallel_fn = getattr(getattr(cfo, "_cso", None), "parallel_classify", None)
+        pid_to_reexpr_results: dict[str, list[dict]] = {}
         if callable(parallel_fn):
-            unique_texts = list({
-                txt for txt in reexpr_texts.values()
-                if (txt, top_k) not in cfo._classify_cache
-            })
-            if unique_texts:
-                # paper_id 자리에 텍스트 자체를 넣어 결과와 1:1 매핑
+            # 캐시 miss 텍스트만 병렬 처리, 캐시 hit은 직접 조회
+            unique_miss_texts: list[str] = []
+            seen_texts: set[str] = set()
+            for pid in candidates:
+                txt = reexpr_texts[pid]
+                if (txt, top_k) not in cfo._classify_cache and txt not in seen_texts:
+                    unique_miss_texts.append(txt)
+                    seen_texts.add(txt)
+            if unique_miss_texts:
                 batch_papers = [
                     {"paper_id": txt, "title": "", "abstract": txt}
-                    for txt in unique_texts
+                    for txt in unique_miss_texts
                 ]
                 batch_results = parallel_fn(batch_papers, top_k=top_k)
                 for txt, res in batch_results.items():
                     cfo._classify_cache[(txt, top_k)] = res
+            # 결과 수집 (캐시에서 직접 읽기)
+            for pid in candidates:
+                txt = reexpr_texts[pid]
+                pid_to_reexpr_results[pid] = cfo._classify_cache.get((txt, top_k), [])
+        else:
+            for pid in candidates:
+                txt = reexpr_texts[pid]
+                pid_to_reexpr_results[pid] = cfo.classify(txt, top_k=top_k)
 
         for pid in sorted(candidates):
             paper = paper_map[pid]
             cur_asgn = assignments[pid]
-            reexpr = reexpr_texts[pid]
 
-            new_results = cfo.classify(reexpr, top_k=top_k)
+            new_results = pid_to_reexpr_results.get(pid, [])
             if not new_results:
                 continue
 
@@ -1263,6 +1423,33 @@ class TreeBuilder:
             # Repair hard duplicates (safety net)
             assignments = _repair_hard_duplicates(root_papers, label_set, assignments)
 
+            # Post-hoc coverage boost: score=0.05 fallback 논문을 추가 라벨로 재배정
+            # reexpress 완료 후에 적용하므로 기존 배정에 영향 없음
+            fallback_pids = [pid for pid, asgn in assignments.items() if asgn.get("score", 1.0) <= 0.05]
+            if len(fallback_pids) > len(root_papers) * 0.20:
+                # 20% 이상이 fallback이면 추가 라벨 탐색
+                onto = _get_ontology()
+                extra_freq: dict[str, int] = defaultdict(int)
+                for pid in fallback_pids:
+                    for r in classify_results.get(pid, [])[:3]:
+                        lbl = r["label_id"]
+                        if lbl not in set(label_set):
+                            extra_freq[lbl] += 1
+                if extra_freq:
+                    # 빈도 최상위 1개 추가
+                    best_extra = max(extra_freq, key=lambda k: extra_freq[k])
+                    if extra_freq[best_extra] >= 2:
+                        label_set = label_set + [best_extra]
+                        warnings.append(
+                            f"Post-hoc coverage: added '{best_extra}' for {len(fallback_pids)} fallback papers"
+                        )
+                        # fallback 논문만 재배정 (기존 배정은 유지)
+                        fallback_papers = [p for p in root_papers if p["paper_id"] in set(fallback_pids)]
+                        new_asgns = _simulate_assignment(fallback_papers, label_set, classify_results, self._cfo)
+                        for pid, asgn in new_asgns.items():
+                            if assignments[pid].get("score", 1.0) <= 0.05:
+                                assignments[pid] = asgn
+
             # Count reexpressed
             for asgn in assignments.values():
                 if asgn.get("was_reexpressed"):
@@ -1311,6 +1498,7 @@ class TreeBuilder:
                     asgn = assignments[pid]
                     children.append({
                         "paper_id": pid,
+                        "title": gp.get("title", ""),
                         "assignment": {
                             "cfo_label_id": asgn["label_id"],
                             "score": asgn["score"],

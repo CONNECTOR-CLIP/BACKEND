@@ -15,7 +15,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/search")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000")
 public class SearchController {
 
     private final SearchService searchService;
@@ -64,6 +63,20 @@ public class SearchController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    // GET /api/search/recent
+    @GetMapping("/recent")
+    public ResponseEntity<List<SearchHistoryResponseDto>> getRecentSearchWords(
+            @RequestHeader(value = "Authorization", required = false) String token,
+            @RequestParam(required = false) String userId) {
+        return getHistory(token, userId);
+    }
+
+    // GET /api/search/trend
+    @GetMapping("/trend")
+    public ResponseEntity<List<String>> getTrendKeywords() {
+        return ResponseEntity.ok(searchService.getTrendKeywords());
     }
 
     private String resolveUserId(String token, String fallbackUserId) {

@@ -22,7 +22,6 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000")
 public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
@@ -59,5 +58,25 @@ public class AuthController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new AuthResponseDto(null, null));
         }
+    }
+
+    @PostMapping("/auth/logout")
+    public ResponseEntity<Void> logout() {
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/auth/social/login")
+    public ResponseEntity<AuthResponseDto> socialLogin() {
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(new AuthResponseDto(null, null));
+    }
+
+    @PostMapping("/auth/findId")
+    public ResponseEntity<String> findId() {
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body("아이디 찾기는 아직 구현되지 않았습니다.");
+    }
+
+    @PostMapping("/auth/findpassword")
+    public ResponseEntity<String> findPassword() {
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body("비밀번호 찾기는 아직 구현되지 않았습니다.");
     }
 }

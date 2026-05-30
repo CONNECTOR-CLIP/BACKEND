@@ -19,6 +19,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -38,6 +40,10 @@ public class SearchService {
     // POST /api/search/mindmap
     // paperIds → DB에서 abstract 조회 → Python으로 전달 → 노드/엣지 반환
     public MindmapResponseDto getMindmap(MindmapRequestDto requestDto) {
+        if (requestDto.getPaperIds() == null || requestDto.getPaperIds().isEmpty()) {
+            throw new IllegalArgumentException("선택한 논문이 없습니다.");
+        }
+
         // paper_id 목록으로 DB에서 논문 조회
         List<Paper> papers = paperRepository.findAllById(requestDto.getPaperIds());
 
@@ -49,7 +55,7 @@ public class SearchService {
         List<Map<String, Object>> paperData = papers.stream()
                 .map(p -> Map.<String, Object>of(
                         "paper_id", p.getPaperId(),
-                        "title",    p.getTitle(),
+                        "title",    p.getTitle() != null ? p.getTitle() : p.getPaperId(),
                         "abstract", p.getAbstracts() != null ? p.getAbstracts() : ""
                 ))
                 .collect(Collectors.toList());
@@ -66,6 +72,10 @@ public class SearchService {
                 .retrieve()
                 .bodyToMono(Map.class)
                 .block();
+
+        if (result == null) {
+            result = Collections.emptyMap();
+        }
 
         List<Map<String, Object>> nodes = (List<Map<String, Object>>) result.get("nodes");
         List<Map<String, Object>> edges = (List<Map<String, Object>>) result.get("edges");
@@ -103,6 +113,21 @@ public class SearchService {
         }
         return searchHistoryRepository.findByIsVisibleTrueOrderByCreatedAtDesc().stream()
                 .map(SearchHistoryResponseDto::new)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getTrendKeywords() {
+        return searchHistoryRepository.findByIsVisibleTrueOrderByCreatedAtDesc().stream()
+                .collect(Collectors.groupingBy(
+                        SearchHistory::getKeyword,
+                        LinkedHashMap::new,
+                        Collectors.counting()
+                ))
+                .entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .limit(8)
                 .collect(Collectors.toList());
     }
 }

@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/gap")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000")
 public class GapController {
 
     private final GapService gapService;
@@ -29,6 +28,22 @@ public class GapController {
         } catch (Exception e) {
             log.error("GAP 분석 오류: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // POST /api/gap/refresh — 프론트 호환 별칭
+    @PostMapping("/refresh")
+    public ResponseEntity<GapResponseDto> refreshGap(@RequestBody GapRequestDto requestDto) {
+        return analyzeGap(requestDto);
+    }
+
+    // GET /api/gap/{id}
+    @GetMapping("/{id}")
+    public ResponseEntity<GapResponseDto> getGap(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(gapService.getById(id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
     }
 }

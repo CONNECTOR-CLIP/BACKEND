@@ -19,9 +19,9 @@ public class AnalysisService {
 
         // category 기준으로 논문 수 집계
         Map<String, Long> countMap = nodes.stream()
-                .filter(node -> node.get("category") != null)
+                .filter(node -> node.get("label") != null)
                 .collect(Collectors.groupingBy(
-                        node -> node.get("category").toString(),
+                        node -> node.get("label").toString(),
                         Collectors.counting()
                 ));
 

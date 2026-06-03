@@ -28,7 +28,7 @@ public class GapService {
     private final PaperRepository paperRepository;
     private final WebClient webClient;
 
-    @Value("${python.api.base-url}")
+    @Value("${python.futurework.api.base-url}")
     private String pythonBaseUrl;
 
     // POST /api/gap

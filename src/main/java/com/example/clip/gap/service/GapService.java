@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -71,7 +72,7 @@ public class GapService {
                     .bodyValue(payload)
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                    .block();
+                    .block(Duration.ofMinutes(10));
         } catch (Exception e) {
             log.error("Python FutureWork API 호출 실패: {}", e.getMessage());
             pythonResult = Collections.emptyMap();

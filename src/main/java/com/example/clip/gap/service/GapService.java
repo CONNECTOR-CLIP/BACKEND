@@ -1,6 +1,7 @@
 package com.example.clip.gap.service;
 
 import com.example.clip.gap.domain.GapResult;
+import com.example.clip.gap.dto.DraftRequestDto;
 import com.example.clip.gap.dto.GapRequestDto;
 import com.example.clip.gap.dto.GapResponseDto;
 import com.example.clip.gap.repository.GapResultRepository;
@@ -128,6 +129,24 @@ public class GapService {
             }
         }
         return savedPapers;
+    }
+
+    public Map<String, Object> generateDraft(DraftRequestDto requestDto) {
+        Map<String, Object> payload = Map.of("proposal", requestDto.getProposal());
+        Map<String, Object> result;
+        try {
+            result = webClient.post()
+                    .uri(pythonBaseUrl + "/api/gap/draft")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(payload)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block();
+        } catch (Exception e) {
+            log.error("Python 논문 초안 생성 API 호출 실패: {}", e.getMessage());
+            result = Collections.emptyMap();
+        }
+        return result != null ? result : Collections.emptyMap();
     }
 
     @Transactional(readOnly = true)

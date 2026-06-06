@@ -1,5 +1,6 @@
 package com.example.clip.gap.controller;
 
+import com.example.clip.gap.dto.DraftRequestDto;
 import com.example.clip.gap.dto.GapRequestDto;
 import com.example.clip.gap.dto.GapResponseDto;
 import com.example.clip.gap.service.GapService;
@@ -8,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -35,6 +37,18 @@ public class GapController {
     @PostMapping("/refresh")
     public ResponseEntity<GapResponseDto> refreshGap(@RequestBody GapRequestDto requestDto) {
         return analyzeGap(requestDto);
+    }
+
+    // POST /api/gap/draft — 선택한 제안으로 논문 초안 생성
+    @PostMapping("/draft")
+    public ResponseEntity<Map<String, Object>> generateDraft(@RequestBody DraftRequestDto requestDto) {
+        try {
+            Map<String, Object> result = gapService.generateDraft(requestDto);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("논문 초안 생성 오류: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     // GET /api/gap/{id}

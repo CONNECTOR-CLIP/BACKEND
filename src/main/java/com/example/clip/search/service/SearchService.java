@@ -106,7 +106,7 @@ public class SearchService {
         if (userId != null) {
             User user = userRepository.findByUserId(userId).orElse(null);
             if (user != null) {
-                return searchHistoryRepository.findByUserOrderByCreatedAtDesc(user).stream()
+                return searchHistoryRepository.findByUserAndIsVisibleTrueOrderByCreatedAtDesc(user).stream()
                         .map(SearchHistoryResponseDto::new)
                         .collect(Collectors.toList());
             }
@@ -114,6 +114,25 @@ public class SearchService {
         return searchHistoryRepository.findByIsVisibleTrueOrderByCreatedAtDesc().stream()
                 .map(SearchHistoryResponseDto::new)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void deleteHistory(String userId, Long historyId) {
+        searchHistoryRepository.findById(historyId).ifPresent(h -> {
+            h.setIsVisible(false);
+            searchHistoryRepository.save(h);
+        });
+    }
+
+    @Transactional
+    public void clearHistory(String userId) {
+        if (userId == null) return;
+        User user = userRepository.findByUserId(userId).orElse(null);
+        if (user == null) return;
+        searchHistoryRepository.findByUser(user).forEach(h -> {
+            h.setIsVisible(false);
+            searchHistoryRepository.save(h);
+        });
     }
 
     @Transactional(readOnly = true)

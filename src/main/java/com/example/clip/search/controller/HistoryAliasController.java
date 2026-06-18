@@ -35,6 +35,21 @@ public class HistoryAliasController {
         return ResponseEntity.ok(searchService.getHistory(resolveUserId(token, userId)));
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteHistory(
+            @RequestHeader(value = "Authorization", required = false) String token,
+            @PathVariable Long id) {
+        searchService.deleteHistory(resolveUserId(token, null), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping
+    public ResponseEntity<Void> clearHistory(
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        searchService.clearHistory(resolveUserId(token, null));
+        return ResponseEntity.noContent().build();
+    }
+
     private String resolveUserId(String token, String fallbackUserId) {
         if (token != null && token.startsWith("Bearer ")) {
             return jwtUtil.extractUsername(token.replace("Bearer ", ""));

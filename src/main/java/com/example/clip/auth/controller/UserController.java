@@ -52,6 +52,17 @@ public class UserController {
         return ResponseEntity.ok(Map.of("nickname", user.getNickname()));
     }
 
+    @DeleteMapping("/account")
+    public ResponseEntity<Void> deleteAccount(
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        User user = resolveUser(token);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        userRepository.delete(user);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/password")
     public ResponseEntity<Void> changePassword(
             @RequestHeader(value = "Authorization", required = false) String token,

@@ -4,6 +4,7 @@ package com.example.clip.auth.controller;
 
 import com.example.clip.auth.dto.AuthResponseDto;
 import com.example.clip.auth.dto.LoginRequestDto;
+import com.example.clip.auth.dto.MessageResponseDto;
 import com.example.clip.auth.dto.SignUpRequestDto;
 import com.example.clip.auth.service.UserService;
 import com.example.clip.auth.util.JwtUtil;
@@ -28,14 +29,14 @@ public class AuthController {
     private final UserService userService;
 
     @PostMapping("/auth/signup")
-    public ResponseEntity<String> registerUser(@Valid @RequestBody SignUpRequestDto signUpRequestDto) {
+    public ResponseEntity<MessageResponseDto> registerUser(@Valid @RequestBody SignUpRequestDto signUpRequestDto) {
         try {
             userService.registerUser(signUpRequestDto);
-            return ResponseEntity.status(HttpStatus.CREATED).body("회원 가입 성공");
+            return ResponseEntity.status(HttpStatus.CREATED).body(new MessageResponseDto("회원 가입 성공"));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(new MessageResponseDto(e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("회원 가입 중 오류가 발생했습니다.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new MessageResponseDto("회원 가입 중 오류가 발생했습니다."));
         }
     }
 

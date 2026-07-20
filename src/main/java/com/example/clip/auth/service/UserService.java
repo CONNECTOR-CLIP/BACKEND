@@ -18,11 +18,15 @@ public class UserService {
     @Transactional
     public void registerUser(SignUpRequestDto signUpRequestDto) {
         if (userRepository.existsByUserId(signUpRequestDto.getUserId())) {
-            throw new IllegalArgumentException("UserID 사용자 계정이 사용중입니다.");
+            throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
+        }
+
+        if (userRepository.existsByNickname(signUpRequestDto.getNickname())) {
+            throw new IllegalArgumentException("이미 사용 중인 닉네임입니다.");
         }
 
         if (userRepository.existsByEmail(signUpRequestDto.getEmail())) {
-            throw new IllegalArgumentException("Email 사용자 이메일이 사용중입니다.");
+            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
         }
 
         User user = new User(

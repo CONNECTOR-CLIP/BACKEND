@@ -62,6 +62,66 @@ public class PaperService {
         return response;
     }
 
+    // GET /api/roadmap — 검색 결과를 FE 스펙({ keyword, topics: [{ id, label, papers }] })으로 정규화
+    // 2-1(검색)과 달리 Python roadmap 트리의 의미있는 주제명(label)을 사용
+    public Map<String, Object> roadmap(SearchRequestDto requestDto) {
+        Map<String, Object> raw = search(requestDto);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("keyword", requestDto.getKeyword());
+        response.put("topics", normalizeRoadmapTopics(raw, requestDto.getKeyword()));
+        return response;
+    }
+
+    // Python roadmap 트리(roots→intermediate_nodes→children)를 topics 구조로 변환.
+    // 주제 노드의 label을 그대로 쓰고, children의 paper_id로 papers 리스트에서 논문 상세를 join.
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> normalizeRoadmapTopics(Map<String, Object> raw, String keyword) {
+        if (raw == null || !(raw.get("roadmap") instanceof Map<?, ?> roadmap)) {
+            // 로드맵 트리가 없으면 카테고리 그룹 방식으로 폴백
+            return normalizeTopics(raw, keyword);
+        }
+
+        // paper_id → 정규화된 논문 상세 매핑 (topic children이 id만 가지므로 join용)
+        Map<String, Map<String, Object>> paperById = new LinkedHashMap<>();
+        for (Map<String, Object> p : normalizePapers(pickList(raw, "papers", "data", "results", "content"))) {
+            paperById.put(String.valueOf(p.get("id")), p);
+        }
+
+        List<Map<String, Object>> topics = new ArrayList<>();
+        if (((Map<String, Object>) roadmap).get("roots") instanceof List<?> roots) {
+            for (Object r : roots) {
+                if (!(r instanceof Map)) continue;
+                Object nodesObj = ((Map<String, Object>) r).get("intermediate_nodes");
+                if (!(nodesObj instanceof List<?> nodes)) continue;
+                for (Object n : nodes) {
+                    if (!(n instanceof Map)) continue;
+                    Map<String, Object> node = (Map<String, Object>) n;
+
+                    List<Map<String, Object>> topicPapers = new ArrayList<>();
+                    if (node.get("children") instanceof List<?> children) {
+                        for (Object c : children) {
+                            if (!(c instanceof Map)) continue;
+                            String pid = pick((Map<String, Object>) c, "paper_id", "id", "arxiv_id");
+                            Map<String, Object> paper = paperById.get(pid);
+                            if (paper != null) {
+                                topicPapers.add(paper);
+                            }
+                        }
+                    }
+
+                    Map<String, Object> topic = new LinkedHashMap<>();
+                    topic.put("id", pick(node, "node_id", "id"));
+                    topic.put("label", pick(node, "label", "name"));
+                    topic.put("papers", topicPapers);
+                    topics.add(topic);
+                }
+            }
+        }
+
+        // 트리에서 토픽을 못 만들면 카테고리 그룹으로 폴백
+        return topics.isEmpty() ? normalizeTopics(raw, keyword) : topics;
+    }
+
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> normalizeTopics(Map<String, Object> raw, String keyword) {
         if (raw == null || raw.isEmpty()) {

@@ -45,10 +45,11 @@ public class PaperController {
             requestDto.setKeyword(keyword);
             requestDto.setPage(1);
             requestDto.setSize(size);
-            return ResponseEntity.ok(paperService.search(requestDto));
+            return ResponseEntity.ok(paperService.roadmap(requestDto));
         } catch (Exception e) {
             log.error("로드맵 생성 오류: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "로드맵을 불러오지 못했습니다. 잠시 후 다시 시도해주세요."));
         }
     }
 

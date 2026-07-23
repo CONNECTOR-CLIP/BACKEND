@@ -53,10 +53,16 @@ public class PaperController {
         }
     }
 
-    // GET /api/roadmap/node/{id} — 프론트 로드맵 노드 상세 호환 API
+    // GET /api/roadmap/node/{id} — 로드맵 노드 상세. id는 URL 인코딩됨(`::` 포함)
     @GetMapping("/api/roadmap/node/{id}")
     public ResponseEntity<Map<String, Object>> getRoadmapNode(@PathVariable String id) {
         try {
+            // 주제 노드: 로드맵 조회(3-1) 시 캐시된 상세({ label, summary, keyTerms, papers }) 반환
+            Map<String, Object> node = paperService.roadmapNode(id);
+            if (node != null) {
+                return ResponseEntity.ok(node);
+            }
+            // 캐시에 없으면 논문 id로 간주 → 단일 논문 상세 (하위 호환)
             PaperResponseDto paper = paperService.getById(id);
             return ResponseEntity.ok(Map.of(
                     "id", paper.getPaperId(),
@@ -64,11 +70,12 @@ public class PaperController {
                     "paper", paper
             ));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.ok(Map.of(
-                    "id", id,
-                    "type", "category",
-                    "label", id
-            ));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "노드를 찾을 수 없습니다."));
+        } catch (Exception e) {
+            log.error("노드 상세 오류: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "노드 상세 조회에 실패했습니다."));
         }
     }
 

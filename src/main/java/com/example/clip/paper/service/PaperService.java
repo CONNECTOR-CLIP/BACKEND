@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -31,6 +32,10 @@ public class PaperService {
 
     @Value("${python.api.base-url}")
     private String pythonBaseUrl;
+
+    // 로드맵 노드 상세(3-2) 캐시: node_id → { label, summary, keyTerms, papers }
+    // 로드맵 조회(3-1) 시 채워지고, 노드 상세 조회 시 조회됨
+    private final Map<String, Map<String, Object>> roadmapNodeCache = new ConcurrentHashMap<>();
 
     // POST /api/search — Python 검색 API 호출
     public Map<String, Object> search(SearchRequestDto requestDto) {
@@ -72,6 +77,33 @@ public class PaperService {
         return response;
     }
 
+    // GET /api/roadmap/node/{id} — 로드맵 조회(3-1) 시 캐시된 노드 상세를 반환. 없으면 null.
+    // node_id에 keyword가 없어 재검색이 불가하므로, 3-1에서 만든 상세를 캐시에서 조회.
+    public Map<String, Object> roadmapNode(String nodeId) {
+        return roadmapNodeCache.get(nodeId);
+    }
+
+    // 여러 후보 키 중 문자열 리스트를 반환 (["a","b"] 또는 [{term:"a"}] 형태 모두 대응)
+    @SuppressWarnings("unchecked")
+    private List<String> pickStringList(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            if (map.get(key) instanceof List<?> list && !list.isEmpty()) {
+                List<String> result = new ArrayList<>();
+                for (Object o : list) {
+                    if (o instanceof Map) {
+                        Map<String, Object> m = (Map<String, Object>) o;
+                        Object v = m.getOrDefault("term", m.getOrDefault("label", m.get("keyword")));
+                        if (v != null && !v.toString().isBlank()) result.add(v.toString());
+                    } else if (o != null && !o.toString().isBlank()) {
+                        result.add(o.toString());
+                    }
+                }
+                if (!result.isEmpty()) return result;
+            }
+        }
+        return Collections.emptyList();
+    }
+
     // Python roadmap 트리(roots→intermediate_nodes→children)를 topics 구조로 변환.
     // 주제 노드의 label을 그대로 쓰고, children의 paper_id로 papers 리스트에서 논문 상세를 join.
     @SuppressWarnings("unchecked")
@@ -109,11 +141,22 @@ public class PaperService {
                         }
                     }
 
+                    String nodeId = pick(node, "node_id", "id");
+                    String label = pick(node, "label", "name");
+
                     Map<String, Object> topic = new LinkedHashMap<>();
-                    topic.put("id", pick(node, "node_id", "id"));
-                    topic.put("label", pick(node, "label", "name"));
+                    topic.put("id", nodeId);
+                    topic.put("label", label);
                     topic.put("papers", topicPapers);
                     topics.add(topic);
+
+                    // 노드 상세 조회(3-2)용 캐시 저장
+                    Map<String, Object> detail = new LinkedHashMap<>();
+                    detail.put("label", label);
+                    detail.put("summary", pick(node, "summary", "description"));
+                    detail.put("keyTerms", pickStringList(node, "keyTerms", "key_terms", "keywords", "terms"));
+                    detail.put("papers", topicPapers);
+                    roadmapNodeCache.put(nodeId, detail);
                 }
             }
         }

@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Collections;
@@ -41,15 +42,123 @@ public class PaperService {
             payload.put("category", requestDto.getCategory());
         }
 
+        // FE 타임아웃(10초)보다 먼저 끊어서 message 있는 에러 응답을 내려주기 위한 제한
         Map<String, Object> result = webClient.post()
                 .uri(pythonBaseUrl + "/api/search")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(payload)
                 .retrieve()
                 .bodyToMono(Map.class)
-                .block();
+                .block(java.time.Duration.ofSeconds(9));
 
         return result != null ? result : Collections.emptyMap();
+    }
+
+    // POST /api/search — Python 응답을 FE 스펙({ topics: [{ id, label, papers }] })으로 정규화
+    public Map<String, Object> searchTopics(SearchRequestDto requestDto) {
+        Map<String, Object> raw = search(requestDto);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("topics", normalizeTopics(raw, requestDto.getKeyword()));
+        return response;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> normalizeTopics(Map<String, Object> raw, String keyword) {
+        if (raw == null || raw.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Python이 이미 topics 구조로 주는 경우: 필드명만 정규화
+        if (raw.get("topics") instanceof List<?> topicList) {
+            return topicList.stream()
+                    .filter(t -> t instanceof Map)
+                    .map(t -> {
+                        Map<String, Object> topic = (Map<String, Object>) t;
+                        String label = pick(topic, "label", "name", "category", "keyword");
+                        Map<String, Object> norm = new LinkedHashMap<>();
+                        norm.put("id", pickOr(topic, topicId(keyword, label), "id", "topic_id"));
+                        norm.put("label", label);
+                        norm.put("papers", normalizePapers(topic.get("papers")));
+                        return norm;
+                    })
+                    .collect(Collectors.toList());
+        }
+
+        // 평평한 논문 리스트로 주는 경우: 카테고리별로 묶어 topics 생성
+        List<Map<String, Object>> papers = normalizePapers(
+                pickList(raw, "papers", "data", "results", "content"));
+        if (papers.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, List<Map<String, Object>>> grouped = papers.stream()
+                .collect(Collectors.groupingBy(
+                        p -> String.valueOf(p.getOrDefault("privaryCategory", "기타")),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<Map<String, Object>> topics = new ArrayList<>();
+        grouped.forEach((category, categoryPapers) -> {
+            Map<String, Object> topic = new LinkedHashMap<>();
+            topic.put("id", topicId(keyword, category));
+            topic.put("label", category);
+            topic.put("papers", categoryPapers);
+            topics.add(topic);
+        });
+        return topics;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> normalizePapers(Object papersObj) {
+        if (!(papersObj instanceof List<?> list)) {
+            return Collections.emptyList();
+        }
+        return list.stream()
+                .filter(p -> p instanceof Map)
+                .map(p -> {
+                    Map<String, Object> paper = (Map<String, Object>) p;
+                    Map<String, Object> norm = new LinkedHashMap<>();
+                    norm.put("id", pick(paper, "id", "arxiv_id", "paper_id", "paperId"));
+                    norm.put("title", pick(paper, "title"));
+                    norm.put("abstracts", pick(paper, "abstracts", "abstract", "summary"));
+                    norm.put("author", pick(paper, "author", "submitter", "authors"));
+                    norm.put("createdDate", pick(paper, "createdDate", "created_date", "published"));
+                    norm.put("privaryCategory", pick(paper, "privaryCategory", "primary_category", "arxiv_primary_category"));
+                    return norm;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String topicId(String keyword, String label) {
+        return "topic::" + (keyword != null ? keyword : "") + "::" + label;
+    }
+
+    // 여러 후보 키 중 처음으로 값이 있는 것을 반환
+    private String pick(Map<String, Object> map, String... keys) {
+        return pickOr(map, "", keys);
+    }
+
+    private String pickOr(Map<String, Object> map, String fallback, String... keys) {
+        for (String key : keys) {
+            Object val = map.get(key);
+            if (val instanceof List<?> list && !list.isEmpty()) {
+                return list.get(0).toString();
+            }
+            if (val != null && !val.toString().isBlank()) {
+                return val.toString();
+            }
+        }
+        return fallback;
+    }
+
+    private Object pickList(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            if (map.get(key) instanceof List) {
+                return map.get(key);
+            }
+        }
+        return null;
     }
 
     // POST /api/paper/select — 선택한 논문 데이터를 PostgreSQL에 저장

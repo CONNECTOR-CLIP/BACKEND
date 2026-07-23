@@ -19,15 +19,16 @@ public class PaperController {
 
     private final PaperService paperService;
 
-    // POST /api/search — Python 검색 API 호출 후 결과 반환
+    // POST /api/search — Python 검색 결과를 { topics: [...] } 구조로 정규화해 반환
     @PostMapping("/api/search")
     public ResponseEntity<Map<String, Object>> search(@RequestBody SearchRequestDto requestDto) {
         try {
-            Map<String, Object> result = paperService.search(requestDto);
+            Map<String, Object> result = paperService.searchTopics(requestDto);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("논문 검색 오류: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "검색에 실패했습니다. 잠시 후 다시 시도해주세요."));
         }
     }
 

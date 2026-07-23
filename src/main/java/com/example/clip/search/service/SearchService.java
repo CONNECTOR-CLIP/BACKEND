@@ -82,9 +82,9 @@ public class SearchService {
         return new MindmapResponseDto(nodes, edges);
     }
 
-    // POST /api/search/history
+    // POST /api/search/history — 저장 후 생성된 history id 반환
     @Transactional
-    public void saveHistory(String userId, SearchHistoryRequestDto requestDto) {
+    public Long saveHistory(String userId, SearchHistoryRequestDto requestDto) {
         if (requestDto.getKeyword() == null || requestDto.getKeyword().isBlank()) {
             throw new IllegalArgumentException("keyword 값이 비어 있습니다.");
         }
@@ -97,7 +97,28 @@ public class SearchService {
             roadmapId = roadmap.getRoadmapId();
         }
 
-        searchHistoryRepository.save(new SearchHistory(user, requestDto.getKeyword(), roadmapId));
+        SearchHistory saved = searchHistoryRepository.save(new SearchHistory(user, requestDto.getKeyword(), roadmapId));
+        return saved.getHistoryId();
+    }
+
+    // DELETE /api/history/{id} — 단건 삭제 (이미 없어도 성공 처리)
+    @Transactional
+    public void deleteHistory(Long historyId) {
+        if (historyId != null && searchHistoryRepository.existsById(historyId)) {
+            searchHistoryRepository.deleteById(historyId);
+        }
+    }
+
+    // DELETE /api/history — 유저 식별 시 해당 유저 기록 전체 삭제
+    @Transactional
+    public void deleteAllHistory(String userId) {
+        if (userId == null) {
+            return;
+        }
+        User user = userRepository.findByUserId(userId).orElse(null);
+        if (user != null) {
+            searchHistoryRepository.deleteByUser(user);
+        }
     }
 
     // GET /api/search/history

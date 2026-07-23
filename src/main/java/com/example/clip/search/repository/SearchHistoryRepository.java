@@ -9,4 +9,6 @@ import java.util.List;
 public interface SearchHistoryRepository extends JpaRepository<SearchHistory, Long> {
     List<SearchHistory> findByUserOrderByCreatedAtDesc(User user);
     List<SearchHistory> findByIsVisibleTrueOrderByCreatedAtDesc();
+
+    void deleteByUser(User user);
 }

@@ -14,10 +14,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -31,6 +33,10 @@ public class PaperService {
     @Value("${python.api.base-url}")
     private String pythonBaseUrl;
 
+    // 로드맵 노드 상세(3-2) 캐시: node_id → { label, summary, keyTerms, papers }
+    // 로드맵 조회(3-1) 시 채워지고, 노드 상세 조회 시 조회됨
+    private final Map<String, Map<String, Object>> roadmapNodeCache = new ConcurrentHashMap<>();
+
     // POST /api/search — Python 검색 API 호출
     public Map<String, Object> search(SearchRequestDto requestDto) {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -41,15 +47,221 @@ public class PaperService {
             payload.put("category", requestDto.getCategory());
         }
 
+        // FE 타임아웃(10초)보다 먼저 끊어서 message 있는 에러 응답을 내려주기 위한 제한
         Map<String, Object> result = webClient.post()
                 .uri(pythonBaseUrl + "/api/search")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(payload)
                 .retrieve()
                 .bodyToMono(Map.class)
-                .block();
+                .block(java.time.Duration.ofSeconds(9));
 
         return result != null ? result : Collections.emptyMap();
+    }
+
+    // POST /api/search — Python 응답을 FE 스펙({ topics: [{ id, label, papers }] })으로 정규화
+    public Map<String, Object> searchTopics(SearchRequestDto requestDto) {
+        Map<String, Object> raw = search(requestDto);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("topics", normalizeTopics(raw, requestDto.getKeyword()));
+        return response;
+    }
+
+    // GET /api/roadmap — 검색 결과를 FE 스펙({ keyword, topics: [{ id, label, papers }] })으로 정규화
+    // 2-1(검색)과 달리 Python roadmap 트리의 의미있는 주제명(label)을 사용
+    public Map<String, Object> roadmap(SearchRequestDto requestDto) {
+        Map<String, Object> raw = search(requestDto);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("keyword", requestDto.getKeyword());
+        response.put("topics", normalizeRoadmapTopics(raw, requestDto.getKeyword()));
+        return response;
+    }
+
+    // GET /api/roadmap/node/{id} — 로드맵 조회(3-1) 시 캐시된 노드 상세를 반환. 없으면 null.
+    // node_id에 keyword가 없어 재검색이 불가하므로, 3-1에서 만든 상세를 캐시에서 조회.
+    public Map<String, Object> roadmapNode(String nodeId) {
+        return roadmapNodeCache.get(nodeId);
+    }
+
+    // 여러 후보 키 중 문자열 리스트를 반환 (["a","b"] 또는 [{term:"a"}] 형태 모두 대응)
+    @SuppressWarnings("unchecked")
+    private List<String> pickStringList(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            if (map.get(key) instanceof List<?> list && !list.isEmpty()) {
+                List<String> result = new ArrayList<>();
+                for (Object o : list) {
+                    if (o instanceof Map) {
+                        Map<String, Object> m = (Map<String, Object>) o;
+                        Object v = m.getOrDefault("term", m.getOrDefault("label", m.get("keyword")));
+                        if (v != null && !v.toString().isBlank()) result.add(v.toString());
+                    } else if (o != null && !o.toString().isBlank()) {
+                        result.add(o.toString());
+                    }
+                }
+                if (!result.isEmpty()) return result;
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    // Python roadmap 트리(roots→intermediate_nodes→children)를 topics 구조로 변환.
+    // 주제 노드의 label을 그대로 쓰고, children의 paper_id로 papers 리스트에서 논문 상세를 join.
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> normalizeRoadmapTopics(Map<String, Object> raw, String keyword) {
+        if (raw == null || !(raw.get("roadmap") instanceof Map<?, ?> roadmap)) {
+            // 로드맵 트리가 없으면 카테고리 그룹 방식으로 폴백
+            return normalizeTopics(raw, keyword);
+        }
+
+        // paper_id → 정규화된 논문 상세 매핑 (topic children이 id만 가지므로 join용)
+        Map<String, Map<String, Object>> paperById = new LinkedHashMap<>();
+        for (Map<String, Object> p : normalizePapers(pickList(raw, "papers", "data", "results", "content"))) {
+            paperById.put(String.valueOf(p.get("id")), p);
+        }
+
+        List<Map<String, Object>> topics = new ArrayList<>();
+        if (((Map<String, Object>) roadmap).get("roots") instanceof List<?> roots) {
+            for (Object r : roots) {
+                if (!(r instanceof Map)) continue;
+                Object nodesObj = ((Map<String, Object>) r).get("intermediate_nodes");
+                if (!(nodesObj instanceof List<?> nodes)) continue;
+                for (Object n : nodes) {
+                    if (!(n instanceof Map)) continue;
+                    Map<String, Object> node = (Map<String, Object>) n;
+
+                    List<Map<String, Object>> topicPapers = new ArrayList<>();
+                    if (node.get("children") instanceof List<?> children) {
+                        for (Object c : children) {
+                            if (!(c instanceof Map)) continue;
+                            String pid = pick((Map<String, Object>) c, "paper_id", "id", "arxiv_id");
+                            Map<String, Object> paper = paperById.get(pid);
+                            if (paper != null) {
+                                topicPapers.add(paper);
+                            }
+                        }
+                    }
+
+                    String nodeId = pick(node, "node_id", "id");
+                    String label = pick(node, "label", "name");
+
+                    Map<String, Object> topic = new LinkedHashMap<>();
+                    topic.put("id", nodeId);
+                    topic.put("label", label);
+                    topic.put("papers", topicPapers);
+                    topics.add(topic);
+
+                    // 노드 상세 조회(3-2)용 캐시 저장
+                    Map<String, Object> detail = new LinkedHashMap<>();
+                    detail.put("label", label);
+                    detail.put("summary", pick(node, "summary", "description"));
+                    detail.put("keyTerms", pickStringList(node, "keyTerms", "key_terms", "keywords", "terms"));
+                    detail.put("papers", topicPapers);
+                    roadmapNodeCache.put(nodeId, detail);
+                }
+            }
+        }
+
+        // 트리에서 토픽을 못 만들면 카테고리 그룹으로 폴백
+        return topics.isEmpty() ? normalizeTopics(raw, keyword) : topics;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> normalizeTopics(Map<String, Object> raw, String keyword) {
+        if (raw == null || raw.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Python이 이미 topics 구조로 주는 경우: 필드명만 정규화
+        if (raw.get("topics") instanceof List<?> topicList) {
+            return topicList.stream()
+                    .filter(t -> t instanceof Map)
+                    .map(t -> {
+                        Map<String, Object> topic = (Map<String, Object>) t;
+                        String label = pick(topic, "label", "name", "category", "keyword");
+                        Map<String, Object> norm = new LinkedHashMap<>();
+                        norm.put("id", pickOr(topic, topicId(keyword, label), "id", "topic_id"));
+                        norm.put("label", label);
+                        norm.put("papers", normalizePapers(topic.get("papers")));
+                        return norm;
+                    })
+                    .collect(Collectors.toList());
+        }
+
+        // 평평한 논문 리스트로 주는 경우: 카테고리별로 묶어 topics 생성
+        List<Map<String, Object>> papers = normalizePapers(
+                pickList(raw, "papers", "data", "results", "content"));
+        if (papers.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, List<Map<String, Object>>> grouped = papers.stream()
+                .collect(Collectors.groupingBy(
+                        p -> String.valueOf(p.getOrDefault("privaryCategory", "기타")),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<Map<String, Object>> topics = new ArrayList<>();
+        grouped.forEach((category, categoryPapers) -> {
+            Map<String, Object> topic = new LinkedHashMap<>();
+            topic.put("id", topicId(keyword, category));
+            topic.put("label", category);
+            topic.put("papers", categoryPapers);
+            topics.add(topic);
+        });
+        return topics;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> normalizePapers(Object papersObj) {
+        if (!(papersObj instanceof List<?> list)) {
+            return Collections.emptyList();
+        }
+        return list.stream()
+                .filter(p -> p instanceof Map)
+                .map(p -> {
+                    Map<String, Object> paper = (Map<String, Object>) p;
+                    Map<String, Object> norm = new LinkedHashMap<>();
+                    norm.put("id", pick(paper, "id", "arxiv_id", "paper_id", "paperId"));
+                    norm.put("title", pick(paper, "title"));
+                    norm.put("abstracts", pick(paper, "abstracts", "abstract", "summary"));
+                    norm.put("author", pick(paper, "author", "submitter", "authors"));
+                    norm.put("createdDate", pick(paper, "createdDate", "created_date", "published"));
+                    norm.put("privaryCategory", pick(paper, "privaryCategory", "primary_category", "arxiv_primary_category"));
+                    return norm;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String topicId(String keyword, String label) {
+        return "topic::" + (keyword != null ? keyword : "") + "::" + label;
+    }
+
+    // 여러 후보 키 중 처음으로 값이 있는 것을 반환
+    private String pick(Map<String, Object> map, String... keys) {
+        return pickOr(map, "", keys);
+    }
+
+    private String pickOr(Map<String, Object> map, String fallback, String... keys) {
+        for (String key : keys) {
+            Object val = map.get(key);
+            if (val instanceof List<?> list && !list.isEmpty()) {
+                return list.get(0).toString();
+            }
+            if (val != null && !val.toString().isBlank()) {
+                return val.toString();
+            }
+        }
+        return fallback;
+    }
+
+    private Object pickList(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            if (map.get(key) instanceof List) {
+                return map.get(key);
+            }
+        }
+        return null;
     }
 
     // POST /api/paper/select — 선택한 논문 데이터를 PostgreSQL에 저장

@@ -4,6 +4,7 @@ package com.example.clip.auth.controller;
 
 import com.example.clip.auth.dto.AuthResponseDto;
 import com.example.clip.auth.dto.LoginRequestDto;
+import com.example.clip.auth.dto.MessageResponseDto;
 import com.example.clip.auth.dto.SignUpRequestDto;
 import com.example.clip.auth.service.UserService;
 import com.example.clip.auth.util.JwtUtil;
@@ -28,19 +29,19 @@ public class AuthController {
     private final UserService userService;
 
     @PostMapping("/auth/signup")
-    public ResponseEntity<String> registerUser(@Valid @RequestBody SignUpRequestDto signUpRequestDto) {
+    public ResponseEntity<MessageResponseDto> registerUser(@Valid @RequestBody SignUpRequestDto signUpRequestDto) {
         try {
             userService.registerUser(signUpRequestDto);
-            return ResponseEntity.status(HttpStatus.CREATED).body("회원 가입 성공");
+            return ResponseEntity.status(HttpStatus.CREATED).body(new MessageResponseDto("회원 가입 성공"));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(new MessageResponseDto(e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("회원 가입 중 오류가 발생했습니다.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new MessageResponseDto("회원 가입 중 오류가 발생했습니다."));
         }
     }
 
     @PostMapping("/auth/login")
-    public ResponseEntity<AuthResponseDto> authenticateUser(@Valid @RequestBody LoginRequestDto loginRequestDto) {
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequestDto loginRequestDto) {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
@@ -54,9 +55,11 @@ public class AuthController {
 
             return ResponseEntity.ok(new AuthResponseDto(userDetails.getUsername(), accessToken));
         } catch (BadCredentialsException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponseDto(null, null));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new MessageResponseDto("아이디 또는 비밀번호를 확인해주세요."));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new AuthResponseDto(null, null));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponseDto("로그인 중 오류가 발생했습니다."));
         }
     }
 

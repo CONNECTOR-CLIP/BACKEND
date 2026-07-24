@@ -301,6 +301,38 @@ public class PaperService {
                 .collect(Collectors.toList());
     }
 
+    // POST /api/paper/select — 선택한 논문 id 목록을 { selected: [id...] }로 반환.
+    // papers는 문자열 id 배열(["1706.03762", ...]) 또는 객체 배열 둘 다 허용.
+    // 객체 배열이면 상세 데이터를 DB에도 저장(기존 동작 유지).
+    @Transactional
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> select(List<?> papers) {
+        List<String> selectedIds = new ArrayList<>();
+        List<Map<String, Object>> objectPapers = new ArrayList<>();
+
+        if (papers != null) {
+            for (Object o : papers) {
+                if (o instanceof String s) {
+                    if (!s.isBlank()) selectedIds.add(s);
+                } else if (o instanceof Map<?, ?> m) {
+                    Map<String, Object> pm = (Map<String, Object>) m;
+                    String id = getStr(pm, "arxiv_id", getStr(pm, "paper_id"));
+                    if (!"Unknown".equals(id)) selectedIds.add(id);
+                    objectPapers.add(pm);
+                }
+            }
+        }
+
+        // 전체 논문 객체가 넘어온 경우 DB에도 저장
+        if (!objectPapers.isEmpty()) {
+            selectAndSave(objectPapers);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("selected", selectedIds);
+        return response;
+    }
+
     // null이면 "Unknown" 반환
     private String getStr(Map<String, Object> map, String key) {
         Object val = map.get(key);

@@ -68,21 +68,35 @@ public class UserController {
         }
     }
 
+    // 비밀번호 변경 (현재 비번 검증 후 변경).
     @DeleteMapping("/password")
-    public ResponseEntity<Void> changePassword(
+    public ResponseEntity<Map<String, Object>> changePassword(
             @RequestHeader(value = "Authorization", required = false) String token,
             @RequestBody Map<String, String> payload) {
         User user = resolveUser(token);
         if (user == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "인증이 필요합니다."));
         }
-        String password = payload.get("password");
-        if (password == null || password.isBlank()) {
-            return ResponseEntity.badRequest().build();
+        String currentPassword = payload.get("currentPassword");
+        String newPassword = payload.get("newPassword");
+        if (currentPassword == null || currentPassword.isBlank()
+                || newPassword == null || newPassword.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "현재 비밀번호와 새 비밀번호를 입력해주세요."));
         }
-        user.setPassword(passwordEncoder.encode(password));
-        userRepository.save(user);
-        return ResponseEntity.noContent().build();
+        // 현재 비밀번호 검증
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "현재 비밀번호가 일치하지 않습니다."));
+        }
+        try {
+            user.setPassword(passwordEncoder.encode(newPassword));
+            userRepository.save(user);
+            return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "비밀번호 변경에 실패했습니다."));
+        }
     }
 
     private User resolveUser(String token) {

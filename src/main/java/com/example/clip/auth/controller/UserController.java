@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -25,14 +26,16 @@ public class UserController {
             @RequestHeader(value = "Authorization", required = false) String token) {
         User user = resolveUser(token);
         if (user == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "인증이 필요합니다."));
         }
-        return ResponseEntity.ok(Map.of(
-                "userId", user.getUserId(),
-                "nickname", user.getNickname(),
-                "email", user.getEmail(),
-                "profileImageUrl", user.getProfileImageUrl() == null ? "" : user.getProfileImageUrl()
-        ));
+        // null 값을 담기 위해 Map.of 대신 HashMap 사용 (Map.of는 null 미허용)
+        Map<String, Object> response = new HashMap<>();
+        response.put("nickname", user.getNickname());
+        response.put("email", user.getEmail());
+        response.put("userId", user.getUserId());
+        response.put("profileImage", user.getProfileImageUrl());
+        return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/nickname")

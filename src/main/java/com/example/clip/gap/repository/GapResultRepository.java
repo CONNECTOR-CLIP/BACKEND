@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface GapResultRepository extends JpaRepository<GapResult, Long> {
     List<GapResult> findByRoadmapIdOrderByInsightIdDesc(Long roadmapId);
+    void deleteByRoadmapId(Long roadmapId);
 }

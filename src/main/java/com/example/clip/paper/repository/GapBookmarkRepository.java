@@ -9,4 +9,5 @@ public interface GapBookmarkRepository extends JpaRepository<GapBookmark, Long> 
     List<GapBookmark> findByUserIdOrderByBookmarkIdDesc(String userId);
     boolean existsByUserIdAndGapId(String userId, String gapId);
     void deleteByUserIdAndGapId(String userId, String gapId);
+    void deleteByUserId(String userId);
 }

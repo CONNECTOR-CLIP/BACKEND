@@ -2,8 +2,10 @@ package com.example.clip.auth.controller;
 
 import com.example.clip.auth.domain.User;
 import com.example.clip.auth.repository.UserRepository;
+import com.example.clip.auth.service.UserService;
 import com.example.clip.auth.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -12,12 +14,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
 public class UserController {
 
     private final UserRepository userRepository;
+    private final UserService userService;
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
 
@@ -96,6 +100,26 @@ public class UserController {
             return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "비밀번호 변경에 실패했습니다."));
+        }
+    }
+    
+    // JWT는 서버 상태가 없어 토큰 자체를 무효화할 수 없으나, 유저 삭제 시
+    // 이후 요청은 resolveUser에서 유저를 못 찾아 401이 되어 사실상 무효화됨.
+    @DeleteMapping("/account")
+    public ResponseEntity<Map<String, Object>> deleteAccount(
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        User user = resolveUser(token);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "인증이 필요합니다."));
+        }
+        try {
+            userService.deleteAccount(user);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            log.error("회원 탈퇴 오류: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "회원 탈퇴에 실패했습니다."));
         }
     }
 

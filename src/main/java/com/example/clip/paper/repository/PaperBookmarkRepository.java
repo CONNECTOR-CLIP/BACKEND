@@ -9,4 +9,5 @@ public interface PaperBookmarkRepository extends JpaRepository<PaperBookmark, Lo
     List<PaperBookmark> findByUserIdOrderByBookmarkIdDesc(String userId);
     boolean existsByUserIdAndPaperId(String userId, String paperId);
     void deleteByUserIdAndPaperId(String userId, String paperId);
+    void deleteByUserId(String userId);
 }

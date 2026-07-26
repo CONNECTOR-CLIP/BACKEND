@@ -44,15 +44,28 @@ public class UserController {
             @RequestBody Map<String, String> payload) {
         User user = resolveUser(token);
         if (user == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "인증이 필요합니다."));
         }
         String nickname = payload.get("nickname");
         if (nickname == null || nickname.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("message", "nickname 값이 필요합니다."));
         }
-        user.setNickname(nickname);
-        userRepository.save(user);
-        return ResponseEntity.ok(Map.of("nickname", user.getNickname()));
+        if (nickname.equals(user.getNickname())) {
+            return ResponseEntity.ok(Map.of("nickname", user.getNickname()));
+        }
+        // 다른 유저가 이미 쓰는 닉네임이면 409
+        if (userRepository.existsByNickname(nickname)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", "이미 사용 중인 닉네임입니다."));
+        }
+        try {
+            user.setNickname(nickname);
+            userRepository.save(user);
+            return ResponseEntity.ok(Map.of("nickname", user.getNickname()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "닉네임 변경에 실패했습니다."));
+        }
     }
 
     @DeleteMapping("/password")

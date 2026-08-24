@@ -9,15 +9,13 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 public class SearchHistoryResponseDto {
-    private Long historyId;
-    private String keyword;
-    private Boolean isVisible;
-    private LocalDateTime createdAt;
+    private String id;
+    private String query;
+    private LocalDateTime searchedAt;
 
     public SearchHistoryResponseDto(SearchHistory history) {
-        this.historyId = history.getHistoryId();
-        this.keyword = history.getKeyword();
-        this.isVisible = history.getIsVisible();
-        this.createdAt = history.getCreatedAt();
+        this.id = history.getHistoryId() != null ? String.valueOf(history.getHistoryId()) : null;
+        this.query = history.getKeyword();
+        this.searchedAt = history.getCreatedAt();
     }
 }

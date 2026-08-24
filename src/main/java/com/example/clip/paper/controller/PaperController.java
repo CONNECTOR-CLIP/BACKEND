@@ -79,17 +79,17 @@ public class PaperController {
         }
     }
 
-    // POST /api/paper/select — 선택한 논문 PostgreSQL 저장
+    // POST /api/paper/select — 선택한 논문 id 목록 반환 { selected: [id...] }
     @PostMapping("/api/paper/select")
-    public ResponseEntity<List<PaperResponseDto>> selectPapers(
-            @RequestBody Map<String, List<Map<String, Object>>> body) {
+    public ResponseEntity<Map<String, Object>> selectPapers(@RequestBody Map<String, Object> body) {
         try {
-            List<Map<String, Object>> selectedPapers = body.get("papers");
-            List<PaperResponseDto> result = paperService.selectAndSave(selectedPapers);
-            return ResponseEntity.ok(result);
+            Object papers = body.get("papers");
+            List<?> list = (papers instanceof List) ? (List<?>) papers : List.of();
+            return ResponseEntity.ok(paperService.select(list));
         } catch (Exception e) {
             log.error("논문 선택 오류: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "논문 선택에 실패했습니다."));
         }
     }
 

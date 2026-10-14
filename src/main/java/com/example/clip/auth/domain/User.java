@@ -8,6 +8,7 @@ import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
+// 유저 계정 엔티티 — PostgreSQL "User" 테이블과 매핑
 @Entity
 @Getter
 @Setter

@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+// 논문 북마크 추가/조회/삭제 API 처리
 @RestController
 @RequestMapping("/api/bookmarks")
 @RequiredArgsConstructor
@@ -22,6 +23,7 @@ public class BookmarkController {
     private final PaperRepository paperRepository;
     private final JwtUtil jwtUtil;
 
+    // GET /api/bookmarks — 로그인 유저의 북마크 목록 반환
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getBookmarks(
             @RequestHeader(value = "Authorization", required = false) String token) {
@@ -40,6 +42,7 @@ public class BookmarkController {
         return ResponseEntity.ok(result);
     }
 
+    // POST /api/bookmarks/paper — 논문 북마크 추가, 이미 존재하면 그대로 반환 (중복 방지)
     @PostMapping("/paper")
     public ResponseEntity<Map<String, Object>> addPaperBookmark(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -51,13 +54,14 @@ public class BookmarkController {
         if (paperId == null || paperId.isBlank())
             return ResponseEntity.badRequest().build();
 
+        // 이미 북마크된 논문이면 재저장 없이 기존 데이터 반환
         if (bookmarkRepository.existsByUserIdAndPaperId(userId, paperId))
             return ResponseEntity.ok(payload);
 
         String title = (String) payload.getOrDefault("title", paperId);
         String category = (String) payload.getOrDefault("category", "");
 
-        // Paper 테이블에서 제목/카테고리 보완
+        // 요청에 title이 없으면 Paper 테이블에서 제목/카테고리 조회해서 보완
         if (title.equals(paperId)) {
             paperRepository.findById(paperId).ifPresent(p -> {
                 payload.put("title", p.getTitle() != null ? p.getTitle() : paperId);
@@ -78,6 +82,7 @@ public class BookmarkController {
         ));
     }
 
+    // DELETE /api/bookmarks/paper/{id} — paperId 기준으로 북마크 삭제
     @DeleteMapping("/paper/{id}")
     public ResponseEntity<Void> removePaperBookmark(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -89,6 +94,7 @@ public class BookmarkController {
         return ResponseEntity.noContent().build();
     }
 
+    // JWT에서 userId 추출, 토큰 없거나 파싱 실패 시 null 반환
     private String resolveUserId(String token) {
         if (token == null || !token.startsWith("Bearer ")) return null;
         try {

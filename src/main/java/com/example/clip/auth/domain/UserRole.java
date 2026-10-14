@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 
+// 유저 권한 정의 — Spring Security GrantedAuthority 구현
 @Getter
 @RequiredArgsConstructor
 public enum UserRole implements GrantedAuthority {

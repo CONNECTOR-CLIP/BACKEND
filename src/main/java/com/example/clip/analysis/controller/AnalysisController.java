@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+// 논문 분포 분석 및 갭 분석 진입점 API 처리
 @Slf4j
 @RestController
 @RequestMapping("/api/analysis")
@@ -21,7 +22,7 @@ public class AnalysisController {
     private final AnalysisService analysisService;
     private final GapService gapService;
 
-    // ⑤ POST /api/analysis/distribution
+    // POST /api/analysis/distribution — 마인드맵 노드를 받아 카테고리별 논문 수 및 점유율 계산
     @PostMapping("/distribution")
     public ResponseEntity<DistributionResponseDto> getDistribution(
             @RequestBody DistributionRequestDto requestDto) {
@@ -34,7 +35,7 @@ public class AnalysisController {
         }
     }
 
-    // POST /api/analysis — 프론트 analyzeGap 별칭
+    // POST /api/analysis — /api/gap과 동일한 갭 분석 처리, 프론트 호환 별칭 엔드포인트
     @PostMapping
     public ResponseEntity<GapResponseDto> analyzeGap(@RequestBody GapRequestDto requestDto) {
         try {

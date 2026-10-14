@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+// 논문 엔티티 — PostgreSQL "Paper" 테이블과 매핑, arxiv 논문 메타데이터 저장
 @Entity
 @Getter
 @Setter

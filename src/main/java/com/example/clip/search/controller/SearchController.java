@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+// 논문 검색 관련 API 처리 — 마인드맵 생성, 검색 기록 저장/조회, 트렌드 키워드 제공
 @Slf4j
 @RestController
 @RequestMapping("/api/search")
@@ -20,7 +21,7 @@ public class SearchController {
     private final SearchService searchService;
     private final JwtUtil jwtUtil;
 
-    // POST /api/search/mindmap
+    // POST /api/search/mindmap — 선택한 논문들로 Python 마인드맵 API 호출 후 노드/엣지 반환
     @PostMapping("/mindmap")
     public ResponseEntity<MindmapResponseDto> getMindmap(@RequestBody MindmapRequestDto requestDto) {
         try {
@@ -32,7 +33,7 @@ public class SearchController {
         }
     }
 
-    // POST /api/search/history
+    // POST /api/search/history — 검색어와 roadmapId를 History 테이블에 저장
     @PostMapping("/history")
     public ResponseEntity<String> saveHistory(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -49,7 +50,7 @@ public class SearchController {
         }
     }
 
-    // GET /api/search/history
+    // GET /api/search/history — isVisible=true인 검색 기록 조회 (유저 로그인 시 본인 기록만)
     @GetMapping("/history")
     public ResponseEntity<List<SearchHistoryResponseDto>> getHistory(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -65,7 +66,7 @@ public class SearchController {
         }
     }
 
-    // GET /api/search/recent
+    // GET /api/search/recent — /api/search/history와 동일 (프론트 호환 별칭)
     @GetMapping("/recent")
     public ResponseEntity<List<SearchHistoryResponseDto>> getRecentSearchWords(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -73,12 +74,13 @@ public class SearchController {
         return getHistory(token, userId);
     }
 
-    // GET /api/search/trend
+    // GET /api/search/trend — 전체 검색 기록에서 빈도 상위 8개 키워드 반환
     @GetMapping("/trend")
     public ResponseEntity<List<String>> getTrendKeywords() {
         return ResponseEntity.ok(searchService.getTrendKeywords());
     }
 
+    // JWT 우선, 없으면 요청 파라미터 userId를 폴백으로 사용
     private String resolveUserId(String token, String fallbackUserId) {
         if (token != null && token.startsWith("Bearer ")) {
             return jwtUtil.extractUsername(token.replace("Bearer ", ""));

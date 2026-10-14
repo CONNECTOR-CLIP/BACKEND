@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+// 로그인된 유저의 프로필 조회/수정/탈퇴 API 처리
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
@@ -20,6 +21,7 @@ public class UserController {
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
 
+    // GET /api/users/information — 토큰에서 유저 식별 후 프로필 정보 반환
     @GetMapping("/information")
     public ResponseEntity<Map<String, Object>> getInformation(
             @RequestHeader(value = "Authorization", required = false) String token) {
@@ -35,6 +37,7 @@ public class UserController {
         ));
     }
 
+    // PATCH /api/users/nickname — 닉네임 변경, 빈 값이면 400 반환
     @PatchMapping("/nickname")
     public ResponseEntity<Map<String, Object>> updateNickname(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -52,6 +55,7 @@ public class UserController {
         return ResponseEntity.ok(Map.of("nickname", user.getNickname()));
     }
 
+    // DELETE /api/users/account — 회원 탈퇴, DB에서 유저 레코드 삭제
     @DeleteMapping("/account")
     public ResponseEntity<Void> deleteAccount(
             @RequestHeader(value = "Authorization", required = false) String token) {
@@ -63,6 +67,7 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    // DELETE /api/users/password — 비밀번호 변경 (메서드명 오해 주의: 실제로는 변경 처리)
     @DeleteMapping("/password")
     public ResponseEntity<Void> changePassword(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -75,11 +80,13 @@ public class UserController {
         if (password == null || password.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
+        // BCrypt로 인코딩 후 저장
         user.setPassword(passwordEncoder.encode(password));
         userRepository.save(user);
         return ResponseEntity.noContent().build();
     }
 
+    // Authorization 헤더에서 JWT를 파싱해 User 엔티티 반환, 토큰 없거나 유저 미존재 시 null
     private User resolveUser(String token) {
         if (token == null || !token.startsWith("Bearer ")) {
             return null;

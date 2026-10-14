@@ -6,6 +6,7 @@ import lombok.Setter;
 import java.util.List;
 import java.util.Map;
 
+// 마인드맵 응답 DTO — Python AI가 생성한 노드와 엣지 데이터를 클라이언트로 전달
 @Getter
 @Setter
 public class MindmapResponseDto {

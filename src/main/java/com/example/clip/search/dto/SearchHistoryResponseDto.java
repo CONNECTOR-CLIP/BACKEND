@@ -6,6 +6,7 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+// 검색 기록 응답 DTO — SearchHistory 엔티티에서 클라이언트에 필요한 필드만 추출
 @Getter
 @Setter
 public class SearchHistoryResponseDto {

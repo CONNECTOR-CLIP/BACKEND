@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+// 갭 분석 결과 북마크 엔티티 — 저장 시각을 직접 관리 (JPA Auditing 미사용)
 @Entity
 @Getter
 @Setter

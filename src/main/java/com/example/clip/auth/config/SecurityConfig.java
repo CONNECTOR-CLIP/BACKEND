@@ -19,6 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.http.HttpStatus;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 
+// Spring Security 설정 — JWT 기반 Stateless 인증, 엔드포인트 접근 권한 정의
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity

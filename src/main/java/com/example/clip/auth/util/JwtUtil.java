@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+// JWT 토큰 생성/파싱/검증 유틸리티
 @Component
 public class JwtUtil {
     @Value("${jwt.secret.key}")

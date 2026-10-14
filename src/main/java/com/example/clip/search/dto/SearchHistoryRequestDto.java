@@ -3,6 +3,7 @@ package com.example.clip.search.dto;
 import lombok.Getter;
 import lombok.Setter;
 
+// 검색 기록 저장 요청 DTO — keyword와 roadmapId는 History 테이블의 필수값
 @Getter
 @Setter
 public class SearchHistoryRequestDto {

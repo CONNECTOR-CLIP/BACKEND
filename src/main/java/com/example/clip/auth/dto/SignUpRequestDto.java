@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+// 회원가입 요청 DTO — 입력값 유효성 검사 어노테이션 포함
 @Getter
 @Setter
 public class SignUpRequestDto {

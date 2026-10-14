@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
+// 로그인 요청 DTO — 아이디/비밀번호 빈 값 검증 포함
 @Getter
 @Setter
 public class LoginRequestDto {

@@ -7,6 +7,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.util.Collection;
 import java.util.Collections;
 
+// Spring Security가 인증에 사용하는 UserDetails 구현체 — User 엔티티를 래핑
 @RequiredArgsConstructor
 public class PrincipalDetails implements UserDetails {
 

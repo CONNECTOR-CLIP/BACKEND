@@ -10,6 +10,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
+// 생성/수정 시각을 자동으로 기록하는 추상 베이스 엔티티 — JPA Auditing 활용
 @Getter
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)

@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+// 논문 북마크 엔티티 — 유저와 논문의 연관 정보 저장
 @Entity
 @Getter
 @Setter

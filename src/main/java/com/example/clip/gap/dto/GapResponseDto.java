@@ -4,6 +4,7 @@ import com.example.clip.gap.domain.GapResult;
 import lombok.Getter;
 import lombok.Setter;
 
+// 갭 분석 응답 DTO — GapResult 엔티티를 클라이언트 응답 형식으로 변환
 @Getter
 @Setter
 public class GapResponseDto {

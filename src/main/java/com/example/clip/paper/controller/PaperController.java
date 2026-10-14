@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+// 논문 검색/조회/저장 및 로드맵 관련 API 처리
 @Slf4j
 @RestController
 @RequiredArgsConstructor
@@ -19,7 +20,7 @@ public class PaperController {
 
     private final PaperService paperService;
 
-    // POST /api/search — Python 검색 API 호출 후 결과 반환
+    // POST /api/search — Python 검색 API를 프록시하여 논문 검색 결과 반환
     @PostMapping("/api/search")
     public ResponseEntity<Map<String, Object>> search(@RequestBody SearchRequestDto requestDto) {
         try {
@@ -31,7 +32,7 @@ public class PaperController {
         }
     }
 
-    // GET /api/roadmap — 프론트 로드맵 페이지 호환 API
+    // GET /api/roadmap?keyword= — 키워드로 논문 검색 후 로드맵 데이터로 반환, keyword 필수
     @GetMapping("/api/roadmap")
     public ResponseEntity<Map<String, Object>> getRoadmap(
             @RequestParam(required = false) String keyword,
@@ -51,7 +52,7 @@ public class PaperController {
         }
     }
 
-    // GET /api/roadmap/node/{id} — 프론트 로드맵 노드 상세 호환 API
+    // GET /api/roadmap/node/{id} — 노드 id가 논문이면 상세 정보, 카테고리이면 label 정보 반환
     @GetMapping("/api/roadmap/node/{id}")
     public ResponseEntity<Map<String, Object>> getRoadmapNode(@PathVariable String id) {
         try {
@@ -62,6 +63,7 @@ public class PaperController {
                     "paper", paper
             ));
         } catch (IllegalArgumentException e) {
+            // id가 논문 ID가 아닌 카테고리 노드일 경우
             return ResponseEntity.ok(Map.of(
                     "id", id,
                     "type", "category",
@@ -70,7 +72,7 @@ public class PaperController {
         }
     }
 
-    // POST /api/paper/select — 선택한 논문 PostgreSQL 저장
+    // POST /api/paper/select — 사용자가 선택한 논문 목록을 PostgreSQL에 저장
     @PostMapping("/api/paper/select")
     public ResponseEntity<List<PaperResponseDto>> selectPapers(
             @RequestBody Map<String, List<Map<String, Object>>> body) {
@@ -84,7 +86,7 @@ public class PaperController {
         }
     }
 
-    // GET /api/paper/{id} — 논문 상세
+    // GET /api/paper — 키워드/카테고리 기반 논문 목록 페이징 조회
     @GetMapping("/api/paper")
     public ResponseEntity<List<PaperResponseDto>> getPapers(
             @RequestParam(required = false) String keyword,
@@ -94,7 +96,7 @@ public class PaperController {
         return ResponseEntity.ok(paperService.getPapers(keyword, category, page, size));
     }
 
-    // GET /api/paper/{id} — 논문 상세
+    // GET /api/paper/{id} — 논문 단건 상세 조회, 없으면 404 반환
     @GetMapping("/api/paper/{id}")
     public ResponseEntity<PaperResponseDto> getPaper(@PathVariable String id) {
         try {

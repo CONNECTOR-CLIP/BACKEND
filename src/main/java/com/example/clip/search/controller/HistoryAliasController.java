@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+// /api/search/history와 동일한 기능을 /api/history 경로로 제공하는 별칭 컨트롤러
 @RestController
 @RequestMapping("/api/history")
 @RequiredArgsConstructor
@@ -19,6 +20,7 @@ public class HistoryAliasController {
     private final SearchService searchService;
     private final JwtUtil jwtUtil;
 
+    // POST /api/history — 검색어 저장
     @PostMapping
     public ResponseEntity<String> saveHistory(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -28,6 +30,7 @@ public class HistoryAliasController {
         return ResponseEntity.status(HttpStatus.CREATED).body("검색어 저장 완료");
     }
 
+    // GET /api/history — 검색 기록 조회
     @GetMapping
     public ResponseEntity<List<SearchHistoryResponseDto>> getHistory(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -35,6 +38,7 @@ public class HistoryAliasController {
         return ResponseEntity.ok(searchService.getHistory(resolveUserId(token, userId)));
     }
 
+    // DELETE /api/history/{id} — 특정 검색 기록 숨김 처리 (실제 삭제가 아닌 isVisible=false)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteHistory(
             @RequestHeader(value = "Authorization", required = false) String token,
@@ -43,6 +47,7 @@ public class HistoryAliasController {
         return ResponseEntity.noContent().build();
     }
 
+    // DELETE /api/history — 로그인 유저의 검색 기록 전체 숨김 처리
     @DeleteMapping
     public ResponseEntity<Void> clearHistory(
             @RequestHeader(value = "Authorization", required = false) String token) {
@@ -50,6 +55,7 @@ public class HistoryAliasController {
         return ResponseEntity.noContent().build();
     }
 
+    // JWT 우선, 없으면 쿼리파라미터 userId를 폴백으로 사용
     private String resolveUserId(String token, String fallbackUserId) {
         if (token != null && token.startsWith("Bearer ")) {
             return jwtUtil.extractUsername(token.replace("Bearer ", ""));

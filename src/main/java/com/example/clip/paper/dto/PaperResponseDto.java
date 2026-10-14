@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+// 논문 응답 DTO — Paper 엔티티에서 클라이언트에 노출할 필드만 추출
 @Getter
 @Setter
 @NoArgsConstructor

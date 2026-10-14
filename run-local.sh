@@ -8,7 +8,7 @@ export DB_PASSWORD=1234
 export JWT_SECRET_KEY=RmFrZVNlY3JldEtleUZvckpXVEFwcGxpY2F0aW9uVGVzdGluZw==
 export JWT_EXPIRATION_TIME=3600000
 export PYTHON_API_URL=http://localhost:8000
-export PYTHON_FUTUREWORK_URL=http://localhost:8000
+export PYTHON_FUTUREWORK_URL=http://localhost:8001
 ./gradlew build -x test --quiet
 JAR=$(ls build/libs/*.jar | grep -v plain | head -1)
 java -Xms256m -Xmx512m -jar "$JAR"

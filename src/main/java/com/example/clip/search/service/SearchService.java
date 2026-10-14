@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 
+// 검색 관련 핵심 로직 처리 — 마인드맵 생성, 검색 기록 관리, 트렌드 키워드 집계
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -37,8 +38,7 @@ public class SearchService {
     @Value("${python.api.base-url}")
     private String pythonBaseUrl;
 
-    // POST /api/search/mindmap
-    // paperIds → DB에서 abstract 조회 → Python으로 전달 → 노드/엣지 반환
+    // paperIds → DB에서 논문 조회 → title/abstract 포함해 Python 마인드맵 API 호출 → 노드/엣지 반환
     public MindmapResponseDto getMindmap(MindmapRequestDto requestDto) {
         if (requestDto.getPaperIds() == null || requestDto.getPaperIds().isEmpty()) {
             throw new IllegalArgumentException("선택한 논문이 없습니다.");
@@ -82,16 +82,18 @@ public class SearchService {
         return new MindmapResponseDto(nodes, edges);
     }
 
-    // POST /api/search/history
+    // 검색어 저장 — roadmapId가 없으면 새 Roadmap 먼저 생성 후 연결
     @Transactional
     public void saveHistory(String userId, SearchHistoryRequestDto requestDto) {
         if (requestDto.getKeyword() == null || requestDto.getKeyword().isBlank()) {
             throw new IllegalArgumentException("keyword 값이 비어 있습니다.");
         }
 
+        // 비회원이면 user=null로 저장
         User user = (userId != null) ? userRepository.findByUserId(userId).orElse(null) : null;
 
         Long roadmapId = requestDto.getRoadmapId();
+        // roadmapId가 없으면 키워드를 제목으로 Roadmap 자동 생성
         if (roadmapId == null) {
             Roadmap roadmap = roadmapRepository.save(new Roadmap(requestDto.getKeyword(), user));
             roadmapId = roadmap.getRoadmapId();
@@ -100,7 +102,7 @@ public class SearchService {
         searchHistoryRepository.save(new SearchHistory(user, requestDto.getKeyword(), roadmapId));
     }
 
-    // GET /api/search/history
+    // 검색 기록 조회 — 로그인 유저면 본인 기록만, 비로그인이면 빈 목록 반환 (다른 사용자 기록 노출 방지)
     @Transactional(readOnly = true)
     public List<SearchHistoryResponseDto> getHistory(String userId) {
         if (userId != null) {
@@ -111,11 +113,10 @@ public class SearchService {
                         .collect(Collectors.toList());
             }
         }
-        return searchHistoryRepository.findByIsVisibleTrueOrderByCreatedAtDesc().stream()
-                .map(SearchHistoryResponseDto::new)
-                .collect(Collectors.toList());
+        return List.of();
     }
 
+    // 특정 검색 기록 숨김 처리 (소프트 삭제 — isVisible=false 설정)
     @Transactional
     public void deleteHistory(String userId, Long historyId) {
         searchHistoryRepository.findById(historyId).ifPresent(h -> {
@@ -124,6 +125,7 @@ public class SearchService {
         });
     }
 
+    // 유저의 전체 검색 기록 일괄 숨김 처리
     @Transactional
     public void clearHistory(String userId) {
         if (userId == null) return;
@@ -135,6 +137,7 @@ public class SearchService {
         });
     }
 
+    // 전체 검색 기록에서 키워드 빈도 집계 후 상위 8개 반환 (홈 화면 트렌드 키워드용)
     @Transactional(readOnly = true)
     public List<String> getTrendKeywords() {
         return searchHistoryRepository.findByIsVisibleTrueOrderByCreatedAtDesc().stream()

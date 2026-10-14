@@ -5,6 +5,7 @@ export DB_PASSWORD=1234
 export JWT_SECRET_KEY=RmFrZVNlY3JldEtleUZvckpXVEFwcGxpY2F0aW9uVGVzdGluZw==
 export JWT_EXPIRATION_TIME=3600000
 export PYTHON_API_URL=http://localhost:8000
+export PYTHON_FUTUREWORK_URL=http://localhost:8001
 JAR=/home/ubuntu/BACKEND/build/libs/CLIP-0.0.1-SNAPSHOT.jar
 nohup java -Xmx350m -jar $JAR > /home/ubuntu/backend.log 2>&1 &
 source /home/ubuntu/AI/venv/bin/activate

@@ -91,6 +91,28 @@ public class GapService {
         return Map.of("jobId", jobId, "status", started.getOrDefault("status", "queued"));
     }
 
+    // POST /api/gap/verify-jobs — 사용자가 고른 제안들을 Python에 넘겨 심화 검증(CoT4→CoT5) 작업을 시작
+    public Map<String, Object> startVerifyJob(Map<String, Object> requestBody) {
+        Object proposals = requestBody != null ? requestBody.get("proposals") : null;
+        if (!(proposals instanceof List<?> list) || list.isEmpty()) {
+            throw new IllegalArgumentException("검증할 제안(proposals)이 없습니다.");
+        }
+
+        Map<String, Object> started = webClient.post()
+                .uri(pythonBaseUrl + "/api/gap/verify-jobs")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("proposals", proposals))
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .block(Duration.ofSeconds(30));
+
+        if (started == null || started.get("job_id") == null) {
+            throw new IllegalStateException("Python 심화 검증 작업을 시작하지 못했습니다.");
+        }
+        return Map.of("jobId", started.get("job_id"),
+                "status", started.getOrDefault("status", "queued"));
+    }
+
     // GET /api/gap/jobs/{jobId} — Python 작업의 단계별 진행 상황을 그대로 전달하고, 완료되면 Insight로 한 번 저장
     @Transactional
     public Map<String, Object> getGapJob(String jobId) {

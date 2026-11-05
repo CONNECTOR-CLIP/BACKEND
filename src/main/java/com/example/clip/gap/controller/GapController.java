@@ -52,6 +52,20 @@ public class GapController {
         }
     }
 
+    // POST /api/gap/verify-jobs — 고른 제안들을 심화 검증(CoT4→CoT5) 비동기 작업으로 시작, jobId 반환
+    // 결과는 GET /api/gap/jobs/{jobId}의 verification 필드({ gate, CoT4, CoT5 })로 조회
+    @PostMapping("/verify-jobs")
+    public ResponseEntity<Map<String, Object>> startVerifyJob(@RequestBody Map<String, Object> requestBody) {
+        try {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(gapService.startVerifyJob(requestBody));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            log.error("GAP 심화 검증 작업 시작 오류: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("error", "AI 서버에 검증을 요청하지 못했습니다."));
+        }
+    }
+
     // GET /api/gap/jobs/{jobId} — 갭 분석 작업의 단계별 진행 상황 조회, 완료 시 insightId 포함
     @GetMapping("/jobs/{jobId}")
     public ResponseEntity<Map<String, Object>> getGapJob(@PathVariable String jobId) {
